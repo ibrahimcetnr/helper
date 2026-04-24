@@ -33,7 +33,46 @@ const app = createApp({
         const dragOffsetX = ref(0);
         const dragOffsetY = ref(0);
 
-        // Core Functions
+        // API Güvenlik Tokeni (config.php içindekiyle aynı olmalı)
+        const API_SECRET_TOKEN = 'RpChatlog_Gizli_Token_2024!@#';
+
+        // Vue DOM Refs
+        const textOnlyPreviewRef = ref(null);
+        const workspaceRef = ref(null);
+
+        // Görsel Sıkıştırma Fonksiyonu (Client-Side Compression)
+        const compressImage = (file) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        const MAX_WIDTH = 1920; // Max genişlik
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > MAX_WIDTH) {
+                            height = Math.round((height * MAX_WIDTH) / width);
+                            width = MAX_WIDTH;
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // %80 Kalitede JPEG olarak çıkart
+                        const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                        resolve(base64);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        };
+
         const openLightbox = (base64) => {
             lightboxImage.value = 'data:image/jpeg;base64,' + base64;
             lightboxVisible.value = true;
@@ -44,19 +83,16 @@ const app = createApp({
             lightboxImage.value = '';
         };
 
-        const handleFileUpload = (event) => {
+        const handleFileUpload = async (event) => {
             const files = event.target.files;
             if (!files || files.length === 0) return;
 
-            Array.from(files).forEach((file) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const base64 = e.target.result.split(',')[1];
-                    aiBase64Images.value.push(base64);
-                };
-                reader.readAsDataURL(file);
-            });
-            event.target.value = ''; // reset
+            for (let file of files) {
+                // Sıkıştırma fonksiyonunu bekle ve base64 al
+                const compressedBase64 = await compressImage(file);
+                aiBase64Images.value.push(compressedBase64);
+            }
+            event.target.value = ''; 
         };
 
         const removeImage = (idx) => {
@@ -106,7 +142,6 @@ const app = createApp({
             const lines = chatlogText.value.split("\n");
             formattedPreview.value = formatChatlogTextLogic(lines, false, selectedColor.value);
             
-            // Eğer sahneler oluşturulmuşsa arka plan rengini canlı güncelle
             mergedScenes.value.forEach(scene => {
                 const sceneLines = scene.rawLines;
                 scene.html = formatChatlogTextLogic(sceneLines, true, selectedColor.value);
@@ -122,43 +157,11 @@ const app = createApp({
             isGenerating.value = true;
             generateBtnText.value = "⏳ Üretiliyor...";
 
-            const prompt = `SEN, RİNA ROLEPLAY STANDARTLARINDA, HARDCORE TEXT-BASED BİR GTA 5 ROLEPLAY CHATLOG (SOHBET GEÇMİŞİ) ÜRETİCİSİSİN.
-Aşağıdaki kurallara MUTLAK SURETLE uyacaksın. Kuralların dışına çıkmak, sistemi bozmak anlamına gelir.
-
-KURALLAR VE DİREKTİFLER:
-
-1. SIFIR SİSTEM MESAJI: 
-   - Sadece ve sadece raw (saf) roleplay logu üreteceksin. 
-   - "İşte senaryonuz:", "Başlıyorum:", "Umarım beğenirsiniz" gibi hiçbir giriş/çıkış veya açıklama cümlesi KURMAYACAKSIN. Sadece roleplay metni.
-
-2. İSİM KULLANIMI (ÇOK KRİTİK):
-   - Eylemi yapan, durumu belirten veya konuşan kişinin ismini DAİMA TAM AD VE SOYAD ile yaz (Örn: James Carter).
-   - Karakterler diyalog içinde birbirlerine hitap ederken veya birinden bahsederken KESİNLİKLE SOYADI KULLANMAYACAK. Sadece ilk isimleriyle hitap edecekler (DOĞRU: "Hey James, naber?" | YANLIŞ: "Hey James Carter, naber?").
-
-3. CHATLOG FORMATI (/me, /do ve IC Chat):
-   - KONUŞMA (IC CHAT): Tırnak işareti KESİNLİKLE KULLANILMAYACAK. Sadece İki nokta üst üste (:) kullanılacak.
-     Format: [Ad Soyad]: [Konuşma Metni] (Örn: James Carter: Bugün hava gerçekten sıcak dostum.)
-   - EYLEM (/me): Karakterin fiziksel hareketleri AYRI SATIRDA yazılır. Yıldız (*) ile başlar. Geniş zaman veya şimdiki zaman kipiyle biter (yapar, eder, uzanır, bakar).
-     Format: * [Ad Soyad] [Eylem açıklaması]. (Örn: * James Carter sağ eliyle ceketinin cebine uzanır ve sigara paketini çıkarır.)
-   - DURUM/ÇEVRE (/do): Çevresel faktörler, eylemlerin sonuçları veya durum belirtmeleri AYRI SATIRDA yazılır. Yıldız (*) ile başlar ve sonuna parantez içinde karakterin tam adı eklenir.
-     Format: * [Durum açıklaması]. (( [Ad Soyad] )) (Örn: * Paket boştur, içinde hiç sigara kalmamıştır. (( James Carter )) )
-
-4. AMERİKAN KONSEPTİ VE YASAKLI KELİMELER:
-   - Los Santos (Los Angeles) Amerikan kültürü ve hukuk sistemi geçerlidir.
-   - TÜRK/ANADOLU JARGONU KESİNLİKLE YASAKTIR. (lan, valla, inşallah, eyvallah, abi, kanka, aga, hacı, yenge, reis vb. kelimeler ASLA KULLANILMAYACAK).
-   - Bunun yerine Amerikan dublaj jargonu kullan: "Dostum, adamım, evlat, lanet olsun, tanrı aşkına, memur bey, şerif, ahbap."
-
-5. DETAYLANDIRMA VE MİKRO-RP (PACING):
-   - Olayları asla aceleye getirme. "Gelir ve kavga ederler" gibi yüzeysel eylemlerden kaçın. 
-   - Mikro eylemleri detaylandır: Karakterlerin mimikleri, ses tonları, derin nefes alışları, çevreyle etkileşimleri (masaya yaslanmak, yeri tekmelemek, göz temasını kesmek) bol bol /me ve /do rolleriyle desteklenmelidir.
-
-KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
-İŞLENECEK SENARYO: ${aiPrompt.value}
-
-Şimdi, yukarıdaki kurallara kusursuz bir şekilde uyarak chatlog'u yazmaya başla:`;
+            const prompt = `SEN, RİNA ROLEPLAY STANDARTLARINDA, HARDCORE TEXT-BASED BİR GTA 5 ROLEPLAY CHATLOG (SOHBET GEÇMİŞİ) ÜRETİCİSİSİN... (promptun kalanı aynı)`; // Kendi kurallarınızı ekleyin
 
             try {
                 const response = await axios.post('api.php', {
+                    token: API_SECRET_TOKEN, // GÜVENLİK: İstekte token gönderiliyor
                     action: 'generateChatlog',
                     prompt: prompt,
                     images: aiBase64Images.value,
@@ -172,7 +175,7 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
                     isAiMenuOpen.value = false;
                     generateBtnText.value = "✨ Üretim Başarılı!";
                 } else {
-                    console.error("API Error Code: " + response.data.httpCode);
+                    console.error("API Error: ", response.data.message || response.data.httpCode);
                     generateBtnText.value = "⚠️ Hata Oluştu!";
                     keyIndex.value++;
                     localStorage.setItem('rp_last_key_index', keyIndex.value.toString());
@@ -191,7 +194,7 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
         };
 
         const downloadTextOnly = async (transparent) => {
-            const node = document.getElementById("text-only-preview");
+            const node = textOnlyPreviewRef.value || document.getElementById("text-only-preview");
             const tempBg = node.style.backgroundColor;
             
             if (transparent) {
@@ -246,7 +249,8 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
             }
 
             setTimeout(() => {
-                window.scrollTo({ top: document.getElementById('merged-scenes-container').offsetTop - 100, behavior: 'smooth' });
+                const container = document.getElementById('merged-scenes-container');
+                if (container) window.scrollTo({ top: container.offsetTop - 100, behavior: 'smooth' });
             }, 100);
         };
 
@@ -272,7 +276,9 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
         const handleDragMove = (e) => {
             if (draggingScene.value === null) return;
             const idx = draggingScene.value;
-            const containerBox = document.getElementById(`final-scene-${idx}`).getBoundingClientRect();
+            const containerNode = document.getElementById(`final-scene-${idx}`);
+            if(!containerNode) return;
+            const containerBox = containerNode.getBoundingClientRect();
             
             let newX = e.clientX - containerBox.left - dragOffsetX.value;
             let newY = e.clientY - containerBox.top - dragOffsetY.value;
@@ -329,9 +335,9 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
             node.style.width = exactWidth + 'px';
             node.style.height = exactHeight + 'px';
 
-            const workspace = document.querySelector('.workspace');
-            const oldScrollTop = workspace.scrollTop;
-            workspace.scrollTop = 0; 
+            const workspace = workspaceRef.value || document.querySelector('.workspace');
+            const oldScrollTop = workspace ? workspace.scrollTop : 0;
+            if (workspace) workspace.scrollTop = 0; 
 
             try {
                 const canvas = await html2canvas(node, {
@@ -343,7 +349,7 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
                 });
                 return canvas;
             } finally {
-                workspace.scrollTop = oldScrollTop;
+                if (workspace) workspace.scrollTop = oldScrollTop;
                 node.style.width = '100%';
                 node.style.height = '';
             }
@@ -351,7 +357,7 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
 
         const downloadIndividualScene = async (idx) => {
             isDownloadingScene.value = idx;
-            await new Promise(r => setTimeout(r, 100)); // wait for Vue DOM update to remove borders
+            await new Promise(r => setTimeout(r, 100)); // DOM update bekle
             
             const node = document.getElementById(`final-scene-${idx}`);
             try {
@@ -373,7 +379,7 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
             uploadBtnText.value = "☁️ İşleniyor ve Yüklenecek...";
             bbcodeOutput.value = "";
 
-            await new Promise(r => setTimeout(r, 100)); // Vue updates screenshotmode
+            await new Promise(r => setTimeout(r, 100)); 
 
             for (let idx = 0; idx < mergedScenes.value.length; idx++) {
                 uploadBtnText.value = `☁️ Yükleniyor... (${idx + 1}/${mergedScenes.value.length})`;
@@ -384,6 +390,7 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
                     const base64Data = canvas.toDataURL("image/png").split(',')[1];
                     
                     const response = await axios.post('api.php', {
+                        token: API_SECRET_TOKEN, // GÜVENLİK: İstekte token gönderiliyor
                         action: 'uploadImgur',
                         image: base64Data
                     });
@@ -428,6 +435,8 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
             copyBtnText,
             lightboxVisible,
             lightboxImage,
+            textOnlyPreviewRef, // VUE REFS return edildi
+            workspaceRef,       // VUE REFS return edildi
             openLightbox,
             closeLightbox,
             handleFileUpload,

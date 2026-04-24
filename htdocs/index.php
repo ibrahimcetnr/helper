@@ -55,7 +55,7 @@
             
         </aside>
 
-        <main class="workspace">
+        <main ref="workspaceRef" class="workspace">
             <div class="toolbar">
                 <div class="toolbar-group">
                     <label style="margin: 0; font-size: 0.8rem;">Metin Arkaplanı:</label>
@@ -68,7 +68,7 @@
             </div>
 
             <div class="canvas-area">
-                <div id="text-only-preview" class="chat-text-layer" v-html="formattedPreview"></div>
+                <div ref="textOnlyPreviewRef" id="text-only-preview" class="chat-text-layer" v-html="formattedPreview"></div>
                 
                 <div id="merged-scenes-container" style="width: 100%; display: flex; flex-direction: column; gap: 40px; align-items: center;" @mousemove="handleDragMove" @mouseup="handleDragEnd" @mouseleave="handleDragEnd">
                     <div v-for="(scene, idx) in mergedScenes" :key="idx" class="merged-scene-wrapper">

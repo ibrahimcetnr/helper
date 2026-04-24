@@ -1,0 +1,6 @@
+# IDE ve Editör Dosyaları
+.vscode/
+.idea/
+
+# Hassas Yapılandırma Dosyaları
+config.php

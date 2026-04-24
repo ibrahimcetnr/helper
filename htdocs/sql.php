@@ -1,11 +1,8 @@
 <?php
-// Veritabanı Bilgilerin
-$host = "sql308.infinityfree.com";
-$user = "if0_40733611";
-$pass = "cakirim123123";
-$db   = "if0_40733611_futurebet_db";
+$config = require 'config.php';
 
-$conn = new mysqli($host, $user, $pass, $db);
+// Veritabanı Bilgileri Config'den çekiliyor
+$conn = new mysqli($config['db_host'], $config['db_user'], $config['db_pass'], $config['db_name']);
 
 if ($conn->connect_error) {
     die("Bağlantı hatası: " . $conn->connect_error);

@@ -1,24 +1,28 @@
 <?php
 header('Content-Type: application/json');
 
+// Güvenli config dosyasını dahil et
+$config = require 'config.php';
+
 // Frontend'den gelen veriyi al
 $input = json_decode(file_get_contents('php://input'), true);
 $action = $input['action'] ?? '';
+$token = $input['token'] ?? ''; // Güvenlik tokenı
 
-// Güvenlik: Kullanıcıdan gizlediğimiz API Anahtarları
-$GEMINI_API_KEYS = [
-    "AIzaSyC_VR50E_bFfy-WXgdss30_F1_KG6qwGKU",
-    "AIzaSyCBPjYeJt5_Q1u_aaQXLsDH91M8c5E3XvA"
-];
-$IMGUR_CLIENT_ID = "774748683d831f8";
+// GÜVENLİK: Gelen istekteki token, bizim config'deki token ile eşleşmiyor ise reddet!
+if ($token !== $config['api_secret_token']) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Yetkisiz API erişimi engellendi!']);
+    exit;
+}
 
 if ($action === 'generateChatlog') {
-    // 1. GEMINI API İSTEĞİ (Veritabanı kayıtları bu aşamada işlenebilir)
     $keyIndex = $input['keyIndex'] ?? 0;
-    $apiKey = $GEMINI_API_KEYS[$keyIndex % count($GEMINI_API_KEYS)];
+    // Config'den API keyleri al
+    $apiKey = $config['gemini_api_keys'][$keyIndex % count($config['gemini_api_keys'])];
     
     $prompt = $input['prompt'];
-    $images = $input['images']; // Base64 array
+    $images = $input['images'];
     
     $apiParts = [['text' => $prompt]];
     foreach ($images as $base64) {
@@ -46,13 +50,12 @@ if ($action === 'generateChatlog') {
 }
 
 if ($action === 'uploadImgur') {
-    // 2. IMGUR API İSTEĞİ
-    $base64Image = $input['image']; // Sadece data kısmı
+    $base64Image = $input['image']; 
     
     $ch = curl_init("https://api.imgur.com/3/image");
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        "Authorization: Client-ID " . $IMGUR_CLIENT_ID,
+        "Authorization: Client-ID " . $config['imgur_client_id'], // Config'den çekiliyor
         "Content-Type: application/json"
     ]);
     curl_setopt($ch, CURLOPT_POST, true);
