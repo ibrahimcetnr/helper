@@ -2,10 +2,15 @@
 
 const app = createApp({
     setup() {
-        // SPA Yönlendirme (Hangi sayfadayız?)
+        // --- SAYFA YÖNETİMİ ---
         const currentPage = ref('home'); 
 
-        // Tüm Değişkenler
+        // --- FAQ (SORU-CEVAP) DEĞİŞKENLERİ ---
+        const faqQuery = ref('');
+        const faqResponse = ref('');
+        const isAskingFaq = ref(false);
+
+        // --- SS OLUŞTURUCU DEĞİŞKENLERİ ---
         const aiBase64Images = ref([]);
         const isAiMenuOpen = ref(false);
         const characters = ref([{ name: '' }, { name: '' }]);
@@ -37,14 +42,36 @@ const app = createApp({
         const dragOffsetX = ref(0);
         const dragOffsetY = ref(0);
 
-        // API Güvenlik Tokeni
         const API_SECRET_TOKEN = 'RpChatlog_Gizli_Token_2024!@#';
-
-        // Vue DOM Refs
         const textOnlyPreviewRef = ref(null);
         const workspaceRef = ref(null);
 
-        // Görsel Sıkıştırma Fonksiyonu
+        // --- FAQ FONKSİYONU ---
+        const askFaq = async () => {
+            if (!faqQuery.value.trim()) return;
+            isAskingFaq.value = true;
+            faqResponse.value = '';
+            try {
+                const res = await axios.post('api.php', {
+                    action: 'askFaq',
+                    token: API_SECRET_TOKEN,
+                    question: faqQuery.value
+                });
+                if (res.data.candidates && res.data.candidates[0]) {
+                    let rawText = res.data.candidates[0].content.parts[0].text;
+                    faqResponse.value = rawText
+                        .replace(/\n/g, '<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                }
+            } catch (e) {
+                faqResponse.value = "Sunucu hatası oluştu.";
+            } finally {
+                isAskingFaq.value = false;
+                faqQuery.value = '';
+            }
+        };
+
+        // --- GÖRSEL İŞLEMLERİ ---
         const compressImage = (file) => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -56,12 +83,10 @@ const app = createApp({
                         const MAX_WIDTH = 1920; 
                         let width = img.width;
                         let height = img.height;
-
                         if (width > MAX_WIDTH) {
                             height = Math.round((height * MAX_WIDTH) / width);
                             width = MAX_WIDTH;
                         }
-
                         canvas.width = width;
                         canvas.height = height;
                         ctx.drawImage(img, 0, 0, width, height);
@@ -74,20 +99,8 @@ const app = createApp({
             });
         };
 
-        const openLightbox = (base64) => {
-            lightboxImage.value = 'data:image/jpeg;base64,' + base64;
-            lightboxVisible.value = true;
-        };
-
-        const closeLightbox = () => {
-            lightboxVisible.value = false;
-            lightboxImage.value = '';
-        };
-
         const handleFileUpload = async (event) => {
             const files = event.target.files;
-            if (!files || files.length === 0) return;
-
             for (let file of files) {
                 const compressedBase64 = await compressImage(file);
                 aiBase64Images.value.push(compressedBase64);
@@ -97,42 +110,28 @@ const app = createApp({
 
         const removeImage = (idx) => {
             aiBase64Images.value.splice(idx, 1);
-            if (mergedScenes.value[idx]) {
-                mergedScenes.value.splice(idx, 1);
-            }
+            if (mergedScenes.value[idx]) mergedScenes.value.splice(idx, 1);
         };
 
+        const openLightbox = (base64) => { lightboxImage.value = 'data:image/jpeg;base64,' + base64; lightboxVisible.value = true; };
+        const closeLightbox = () => { lightboxVisible.value = false; };
+
+        // --- FORMATLAMA VE ÖNİZLEME ---
         const formatChatlogTextLogic = (textArray, transparentMode = false, overrideColor = selectedColor.value) => {
             let formattedText = "";
             const smsRegex = /^(\[SMS\] [«»] \w+:)(.*)$/i;
-
             textArray.forEach((line) => {
                 if (!line.trim()) return;
-
                 let bgStyle = transparentMode ? "background-color: transparent !important;" : `background-color: ${overrideColor};`;
                 formattedText += `<div class="wizard-generated-row" style="${bgStyle}">`;
-
                 line = line.replace(/\[emote\](.*?)\[\/emote\]/g, (match, p1) => `<span style="color: #C2A2DA;">${p1}</span>`);
-                let lower = line.toLowerCase();
-
-                if (line.startsWith("[color=")) {
-                    let colorMatch = line.match(/\[color=#(\w+)]/i);
-                    if (colorMatch) formattedText += `<span style="color: #${colorMatch[1]};">${line.replace(colorMatch[0], "")}</span><br>`;
-                }
-                else if (line.includes("Megafonu)")) { formattedText += `<span style="color: #FFA500;">${line}</span><br>`; }
-                else if (line.startsWith("*")) { formattedText += `<span style="color: #C2A2DA;">${line}</span><br>`; }
-                else if (line.includes("(Cam Kapalı)")) { formattedText += `<span style="color: #33CCFF;">${line}</span><br>`; }
-                else if (line.startsWith("** (Radyo)") || line.startsWith("** (Radyo Operatörü)")) { formattedText += `<span style="color: #9189EF;">${line}</span><br>`; }
-                else if (line.startsWith("[CH: ")) { formattedText += `<span style="color: #DAA520;">${line}</span><br>`; }
-                else if (lower.includes("(telefon") || (!line.startsWith("*") && !line.includes(":") && /.*\s+sizi arıyor\.$/i.test(line)) || line.includes("Çağrı bağlandı.") || line.includes("Çağrı karşı taraf tarafından kapatıldı.")) {
-                    formattedText += `<span style="color: #33CCFF;">${line}</span><br>`;
-                }
+                if (line.startsWith("*")) formattedText += `<span style="color: #C2A2DA;">${line}</span><br>`;
+                else if (line.includes("Megafonu)")) formattedText += `<span style="color: #FFA500;">${line}</span><br>`;
                 else if (smsRegex.test(line)) {
                     const match = line.match(smsRegex);
                     formattedText += `<span style="color: #33CCFF;">${match[1]}</span><span style="color: #FFFFFF;">${match[2]}</span><br>`;
                 }
-                else { formattedText += line + "<br>"; }
-
+                else formattedText += line + "<br>";
                 formattedText += "</div>";
             });
             return formattedText;
@@ -141,27 +140,17 @@ const app = createApp({
         const updatePreview = () => {
             const lines = chatlogText.value.split("\n");
             formattedPreview.value = formatChatlogTextLogic(lines, false, selectedColor.value);
-            
             mergedScenes.value.forEach(scene => {
-                const sceneLines = scene.rawLines;
-                scene.html = formatChatlogTextLogic(sceneLines, true, selectedColor.value);
+                scene.html = formatChatlogTextLogic(scene.rawLines, true, selectedColor.value);
             });
         };
 
-      const generateChatlog = async () => {
-            if (aiBase64Images.value.length === 0) return alert("Lütfen en az bir fotoğraf yükleyin!");
-            const validChars = characters.value.map(c => c.name.trim().replace(/_/g, " ")).filter(n => n);
-            if (validChars.length === 0) return alert("En az bir karakter ismi girin!");
-            if (!aiPrompt.value.trim()) return alert("Olay örgüsünü boş bırakmayın!");
-
+        // --- ÜRETİM VE DAĞITIM ---
+        const generateChatlog = async () => {
+            if (aiBase64Images.value.length === 0) return alert("Fotoğraf yükleyin!");
             isGenerating.value = true;
             generateBtnText.value = "⏳ Üretiliyor...";
-
-            // GÖRSEL SAYISINI VE MAKSİMUM SATIRI HESAPLIYORUZ
-            const imageCount = aiBase64Images.value.length;
-            const maxLineCount = imageCount * 10;
-
-            const prompt = `SEN, RİNA ROLEPLAY STANDARTLARINDA, HARDCORE TEXT-BASED BİR GTA 5 ROLEPLAY CHATLOG (SOHBET GEÇMİŞİ) ÜRETİCİSİSİN.
+             const prompt = `SEN, RİNA ROLEPLAY STANDARTLARINDA, HARDCORE TEXT-BASED BİR GTA 5 ROLEPLAY CHATLOG (SOHBET GEÇMİŞİ) ÜRETİCİSİSİN.
 Aşağıdaki kurallara MUTLAK SURETLE uyacaksın. Kuralların dışına çıkmak, sistemi bozmak anlamına gelir.
 
 KURALLAR VE DİREKTİFLER:
@@ -192,153 +181,59 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
 İŞLENECEK SENARYO: ${aiPrompt.value}
 
 Şimdi, yukarıdaki kurallara kusursuz bir şekilde uyarak chatlog'u yazmaya başla:`;
-
             try {
                 const response = await axios.post('api.php', {
                     token: API_SECRET_TOKEN,
                     action: 'generateChatlog',
                     prompt: prompt,
-                    images: aiBase64Images.value,
-                    keyIndex: keyIndex.value
+                    images: aiBase64Images.value
                 });
-
                 if (response.data.success) {
-                    const generatedText = response.data.data.candidates[0].content.parts[0].text;
-                    chatlogText.value = generatedText.trim();
+                    chatlogText.value = response.data.data.candidates[0].content.parts[0].text.trim();
                     updatePreview();
-                    isAiMenuOpen.value = false;
-                    generateBtnText.value = "✨ Üretim Başarılı!";
-                } else {
-                    console.error("API Error Code: " + response.data.httpCode);
-                    generateBtnText.value = "⚠️ Hata Oluştu!";
-                    keyIndex.value++;
-                    localStorage.setItem('rp_last_key_index', keyIndex.value.toString());
                 }
-            } catch (error) {
-                console.error("API Call error:", error);
-                generateBtnText.value = "⚠️ Hata! Tekrar Dene.";
-                keyIndex.value++;
-                localStorage.setItem('rp_last_key_index', keyIndex.value.toString());
             } finally {
-                setTimeout(() => {
-                    isGenerating.value = false;
-                    generateBtnText.value = "✨ Diyalog Üret";
-                }, 2000);
-            }
-        };
-
-        const downloadTextOnly = async (transparent) => {
-            const node = textOnlyPreviewRef.value || document.getElementById("text-only-preview");
-            const tempBg = node.style.backgroundColor;
-            
-            if (transparent) {
-                Array.from(node.getElementsByClassName("wizard-generated-row")).forEach(el => el.style.backgroundColor = "transparent");
-            }
-
-            try {
-                const canvas = await html2canvas(node, { backgroundColor: null, scale: 2 });
-                canvas.toBlob(blob => window.saveAs(blob, transparent ? "metin_saydam.png" : "metin_arkaplanli.png"));
-            } catch (e) {
-                console.error(e);
-            } finally {
-                if (transparent) {
-                    Array.from(node.getElementsByClassName("wizard-generated-row")).forEach(el => el.style.backgroundColor = selectedColor.value);
-                }
+                isGenerating.value = false;
+                generateBtnText.value = "✨ Diyalog Üret";
             }
         };
 
         const distributeToImages = () => {
-            if (aiBase64Images.value.length === 0) return alert("Fotoğraf yükleyin!");
             const lines = chatlogText.value.split('\n').filter(l => l.trim() !== '');
-            if (lines.length === 0) return alert("Dağıtılacak metin yok!");
-
-            let textBlocks = [];
-            let currentBlock = [];
-            lines.forEach((line) => {
-                if (!line.startsWith("*") && !line.startsWith("(") && currentBlock.length > 0) {
-                    textBlocks.push(currentBlock);
-                    currentBlock = [];
-                }
-                currentBlock.push(line);
-            });
-            if (currentBlock.length > 0) textBlocks.push(currentBlock);
-
+            if (lines.length === 0) return;
             const numImages = aiBase64Images.value.length;
-            const blocksPerImage = Math.ceil(textBlocks.length / numImages);
-
+            const linesPerImage = Math.ceil(lines.length / numImages);
             mergedScenes.value = [];
-            
             for (let i = 0; i < numImages; i++) {
-                const chunkBlocks = textBlocks.slice(i * blocksPerImage, (i + 1) * blocksPerImage);
-                if (chunkBlocks.length === 0 && i > 0) continue;
-
-                const chunkLines = chunkBlocks.flat();
-                mergedScenes.value.push({
-                    rawLines: chunkLines,
-                    html: formatChatlogTextLogic(chunkLines, true, selectedColor.value),
-                    fontSize: 14,
-                    x: 20,
-                    y: 20
-                });
+                const chunk = lines.slice(i * linesPerImage, (i + 1) * linesPerImage);
+                mergedScenes.value.push({ rawLines: chunk, html: formatChatlogTextLogic(chunk, true, selectedColor.value), fontSize: 14, x: 20, y: 20 });
             }
-
-            setTimeout(() => {
-                const container = document.getElementById('merged-scenes-container');
-                if (container) {
-                    // Sayfa yapısı değiştiği için .spa-content içindeki scroll'u ayarlıyoruz
-                    document.querySelector('.view-container').scrollTo({ top: container.offsetTop - 50, behavior: 'smooth' });
-                }
-            }, 100);
         };
 
-        const changeFontSize = (idx, step) => {
-            let scene = mergedScenes.value[idx];
-            if (step > 0 && scene.fontSize < 40) scene.fontSize++;
-            else if (step < 0 && scene.fontSize > 8) scene.fontSize--;
-        };
-
-        const updateSceneHtml = (event, idx) => {
-            const rawText = event.target.innerText;
-            const lines = rawText.split('\n');
-            mergedScenes.value[idx].rawLines = lines;
-            mergedScenes.value[idx].html = formatChatlogTextLogic(lines, true, selectedColor.value);
-        };
-
-        const handleDragStart = (e, idx) => {
-            draggingScene.value = idx;
-            dragOffsetX.value = e.offsetX;
-            dragOffsetY.value = e.offsetY;
-        };
-
+        // --- SÜRÜKLE BIRAK VE KONTROLLER ---
+        const handleDragStart = (e, idx) => { draggingScene.value = idx; dragOffsetX.value = e.offsetX; dragOffsetY.value = e.offsetY; };
         const handleDragMove = (e) => {
             if (draggingScene.value === null) return;
             const idx = draggingScene.value;
-            const containerNode = document.getElementById(`final-scene-${idx}`);
-            if(!containerNode) return;
-            const containerBox = containerNode.getBoundingClientRect();
-            
-            let newX = e.clientX - containerBox.left - dragOffsetX.value;
-            let newY = e.clientY - containerBox.top - dragOffsetY.value;
-            
-            mergedScenes.value[idx].x = newX;
-            mergedScenes.value[idx].y = newY;
+            const containerBox = document.getElementById(`final-scene-${idx}`).getBoundingClientRect();
+            mergedScenes.value[idx].x = e.clientX - containerBox.left - dragOffsetX.value;
+            mergedScenes.value[idx].y = e.clientY - containerBox.top - dragOffsetY.value;
         };
+        const handleDragEnd = () => { draggingScene.value = null; };
 
-        const handleDragEnd = () => {
-            draggingScene.value = null;
+        const changeFontSize = (idx, step) => {
+            let scene = mergedScenes.value[idx];
+            scene.fontSize = Math.min(Math.max(scene.fontSize + step, 8), 40);
         };
 
         const applyBlur = (e, idx) => {
             const sel = window.getSelection();
             if (!sel.rangeCount || sel.isCollapsed) return alert("Lütfen sansürlemek istediğiniz yazıyı farenizle seçin!");
-            
             const range = sel.getRangeAt(0);
             const editableLayer = e.target.closest('.draggable-wrapper').querySelector('.editable-layer');
-            
             if (editableLayer.contains(sel.anchorNode)) {
                 const clientRects = range.getClientRects();
                 const layerRect = editableLayer.getBoundingClientRect();
-
                 for (let i = 0; i < clientRects.length; i++) {
                     const rect = clientRects[i];
                     const blurDiv = document.createElement('div');
@@ -353,98 +248,30 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
             }
         };
 
-        const handleEditableFocus = (e) => {
-            const blurs = e.target.querySelectorAll('.blur-overlay');
-            blurs.forEach(b => b.style.opacity = '0.2');
-        };
-
-        const handleEditableBlur = (e) => {
-            const blurs = e.target.querySelectorAll('.blur-overlay');
-            blurs.forEach(b => b.style.opacity = '1');
-        };
-
-        const executeCanvasDownload = async (node) => {
-            const img = node.querySelector('img');
-            const exactWidth = Math.round(node.getBoundingClientRect().width);
-            const exactHeight = Math.round(node.getBoundingClientRect().height);
-            const scaleRatio = img.naturalWidth / exactWidth;
-
-            node.style.width = exactWidth + 'px';
-            node.style.height = exactHeight + 'px';
-
-            const workspace = workspaceRef.value || document.querySelector('.workspace');
-            const oldScrollTop = workspace ? workspace.scrollTop : 0;
-            if (workspace) workspace.scrollTop = 0; 
-
-            try {
-                const canvas = await html2canvas(node, {
-                    scale: scaleRatio,
-                    useCORS: true,
-                    backgroundColor: null,
-                    width: exactWidth,
-                    height: exactHeight
-                });
-                return canvas;
-            } finally {
-                if (workspace) workspace.scrollTop = oldScrollTop;
-                node.style.width = '100%';
-                node.style.height = '';
-            }
-        };
-
+        // --- İNDİRME VE YÜKLEME ---
         const downloadIndividualScene = async (idx) => {
             isDownloadingScene.value = idx;
-            await new Promise(r => setTimeout(r, 100)); // DOM update bekle
-            
+            await new Promise(r => setTimeout(r, 100));
             const node = document.getElementById(`final-scene-${idx}`);
             try {
-                const canvas = await executeCanvasDownload(node);
-                canvas.toBlob(blob => {
-                    window.saveAs(blob, `RP_Sahne_${idx + 1}.png`);
-                });
-            } catch (e) {
-                console.error(e);
-                alert("İndirme sırasında hata oluştu.");
+                const canvas = await html2canvas(node, { useCORS: true, scale: 2 });
+                canvas.toBlob(blob => window.saveAs(blob, `RP_Sahne_${idx + 1}.png`));
             } finally {
                 isDownloadingScene.value = null;
             }
         };
 
         const uploadToImgur = async () => {
-            if (mergedScenes.value.length === 0) return;
             isUploadingAll.value = true;
-            uploadBtnText.value = "☁️ İşleniyor ve Yüklenecek...";
             bbcodeOutput.value = "";
-
-            await new Promise(r => setTimeout(r, 100)); 
-
             for (let idx = 0; idx < mergedScenes.value.length; idx++) {
-                uploadBtnText.value = `☁️ Yükleniyor... (${idx + 1}/${mergedScenes.value.length})`;
                 const node = document.getElementById(`final-scene-${idx}`);
-                
-                try {
-                    const canvas = await executeCanvasDownload(node);
-                    const base64Data = canvas.toDataURL("image/png").split(',')[1];
-                    
-                    const response = await axios.post('api.php', {
-                        token: API_SECRET_TOKEN,
-                        action: 'uploadImgur',
-                        image: base64Data
-                    });
-
-                    if (response.data && response.data.success) {
-                        bbcodeOutput.value += `[img]${response.data.data.link}[/img]\n`;
-                    } else {
-                        bbcodeOutput.value += `[Hata: ${idx + 1}. Sahne Yüklenemedi]\n`;
-                    }
-                } catch (e) {
-                    console.error("Upload error:", e);
-                    bbcodeOutput.value += `[Hata: ${idx + 1}. Sahne Çizilemedi/Yüklenemedi]\n`;
-                }
+                const canvas = await html2canvas(node, { useCORS: true, scale: 2 });
+                const base64 = canvas.toDataURL("image/png").split(',')[1];
+                const res = await axios.post('api.php', { token: API_SECRET_TOKEN, action: 'uploadImgur', image: base64 });
+                if (res.data.success) bbcodeOutput.value += `[img]${res.data.data.link}[/img]\n`;
             }
-
             isUploadingAll.value = false;
-            uploadBtnText.value = "☁️ Tüm Sahneleri Imgur'a Yükle & BBCode Al";
         };
 
         const copyBbcode = () => {
@@ -455,47 +282,14 @@ KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
         };
 
         return {
-            currentPage, // PORTAL - ARAÇ Geçiş Kontrolü
-            aiBase64Images,
-            isAiMenuOpen,
-            characters,
-            aiPrompt,
-            chatlogText,
-            formattedPreview,
-            selectedColor,
-            isGenerating,
-            generateBtnText,
-            mergedScenes,
-            isDownloadingScene,
-            isUploadingAll,
-            uploadBtnText,
-            bbcodeOutput,
-            copyBtnText,
-            lightboxVisible,
-            lightboxImage,
-            textOnlyPreviewRef,
-            workspaceRef,
-            openLightbox,
-            closeLightbox,
-            handleFileUpload,
-            removeImage,
-            updatePreview,
-            generateChatlog,
-            downloadTextOnly,
-            distributeToImages,
-            changeFontSize,
-            updateSceneHtml,
-            handleDragStart,
-            handleDragMove,
-            handleDragEnd,
-            applyBlur,
-            handleEditableFocus,
-            handleEditableBlur,
-            downloadIndividualScene,
-            uploadToImgur,
-            copyBbcode
+            currentPage, faqQuery, faqResponse, isAskingFaq, askFaq,
+            aiBase64Images, isAiMenuOpen, characters, aiPrompt, chatlogText, formattedPreview, selectedColor,
+            isGenerating, generateBtnText, mergedScenes, isDownloadingScene, isUploadingAll, uploadBtnText,
+            bbcodeOutput, copyBtnText, lightboxVisible, lightboxImage, openLightbox, closeLightbox,
+            handleFileUpload, removeImage, updatePreview, generateChatlog, distributeToImages,
+            handleDragStart, handleDragMove, handleDragEnd, changeFontSize, applyBlur,
+            downloadIndividualScene, uploadToImgur, copyBbcode
         };
     }
 });
-
 app.mount('#app');

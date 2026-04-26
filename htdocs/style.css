@@ -312,3 +312,34 @@ button:disabled { background: var(--border-hover); color: var(--text-muted); cur
     border-top: 1px solid var(--border);
     padding-top: 10px;
 }
+
+.faq-container {
+    max-width: 800px;
+    margin: 60px auto;
+    padding: 0 20px;
+}
+
+.faq-header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.faq-header h2 {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    background: linear-gradient(to right, var(--accent), #a855f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Cevap kartı içindeki metinlerin okunabilirliği */
+.response-content strong {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.response-content br {
+    display: block;
+    margin: 10px 0;
+    content: " ";
+}
