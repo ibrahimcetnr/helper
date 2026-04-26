@@ -2,6 +2,10 @@
 
 const app = createApp({
     setup() {
+        // SPA Yönlendirme (Hangi sayfadayız?)
+        const currentPage = ref('home'); 
+
+        // Tüm Değişkenler
         const aiBase64Images = ref([]);
         const isAiMenuOpen = ref(false);
         const characters = ref([{ name: '' }, { name: '' }]);
@@ -33,14 +37,14 @@ const app = createApp({
         const dragOffsetX = ref(0);
         const dragOffsetY = ref(0);
 
-        // API Güvenlik Tokeni (config.php içindekiyle aynı olmalı)
+        // API Güvenlik Tokeni
         const API_SECRET_TOKEN = 'RpChatlog_Gizli_Token_2024!@#';
 
         // Vue DOM Refs
         const textOnlyPreviewRef = ref(null);
         const workspaceRef = ref(null);
 
-        // Görsel Sıkıştırma Fonksiyonu (Client-Side Compression)
+        // Görsel Sıkıştırma Fonksiyonu
         const compressImage = (file) => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -49,8 +53,7 @@ const app = createApp({
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
-                        
-                        const MAX_WIDTH = 1920; // Max genişlik
+                        const MAX_WIDTH = 1920; 
                         let width = img.width;
                         let height = img.height;
 
@@ -62,8 +65,6 @@ const app = createApp({
                         canvas.width = width;
                         canvas.height = height;
                         ctx.drawImage(img, 0, 0, width, height);
-                        
-                        // %80 Kalitede JPEG olarak çıkart
                         const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                         resolve(base64);
                     };
@@ -88,7 +89,6 @@ const app = createApp({
             if (!files || files.length === 0) return;
 
             for (let file of files) {
-                // Sıkıştırma fonksiyonunu bekle ve base64 al
                 const compressedBase64 = await compressImage(file);
                 aiBase64Images.value.push(compressedBase64);
             }
@@ -148,7 +148,7 @@ const app = createApp({
             });
         };
 
-        const generateChatlog = async () => {
+      const generateChatlog = async () => {
             if (aiBase64Images.value.length === 0) return alert("Lütfen en az bir fotoğraf yükleyin!");
             const validChars = characters.value.map(c => c.name.trim().replace(/_/g, " ")).filter(n => n);
             if (validChars.length === 0) return alert("En az bir karakter ismi girin!");
@@ -157,11 +157,45 @@ const app = createApp({
             isGenerating.value = true;
             generateBtnText.value = "⏳ Üretiliyor...";
 
-            const prompt = `SEN, RİNA ROLEPLAY STANDARTLARINDA, HARDCORE TEXT-BASED BİR GTA 5 ROLEPLAY CHATLOG (SOHBET GEÇMİŞİ) ÜRETİCİSİSİN... (promptun kalanı aynı)`; // Kendi kurallarınızı ekleyin
+            // GÖRSEL SAYISINI VE MAKSİMUM SATIRI HESAPLIYORUZ
+            const imageCount = aiBase64Images.value.length;
+            const maxLineCount = imageCount * 10;
+
+            const prompt = `SEN, RİNA ROLEPLAY STANDARTLARINDA, HARDCORE TEXT-BASED BİR GTA 5 ROLEPLAY CHATLOG (SOHBET GEÇMİŞİ) ÜRETİCİSİSİN.
+Aşağıdaki kurallara MUTLAK SURETLE uyacaksın. Kuralların dışına çıkmak, sistemi bozmak anlamına gelir.
+
+KURALLAR VE DİREKTİFLER:
+
+1. SIFIR SİSTEM MESAJI: 
+   - Sadece ve sadece raw (saf) roleplay logu üreteceksin. 
+   - "İşte senaryonuz:", "Başlıyorum:" gibi hiçbir giriş/çıkış veya açıklama cümlesi KURMAYACAKSIN.
+
+2. İSİM KULLANIMI (ÇOK KRİTİK):
+   - Eylemi yapan, durumu belirten veya konuşan kişinin ismini DAİMA TAM AD VE SOYAD ile yaz (Örn: James Carter).
+   - Karakterler diyalog içinde birbirlerine KESİNLİKLE SOYADI KULLANMAYACAK. Sadece ilk isimleriyle hitap edecekler.
+
+3. CHATLOG FORMATI (/me, /do ve IC Chat):
+   - KONUŞMA (IC CHAT): Tırnak işareti KESİNLİKLE KULLANILMAYACAK. Sadece İki nokta üst üste (:) kullanılacak.
+   - EYLEM (/me): Karakterin fiziksel hareketleri AYRI SATIRDA yazılır. Yıldız (*) ile başlar. Geniş veya şimdiki zaman kipiyle biter.
+   - DURUM/ÇEVRE (/do): Çevresel faktörler AYRI SATIRDA yazılır. Yıldız (*) ile başlar ve sonuna parantez içinde karakterin tam adı eklenir.
+
+4. AMERİKAN KONSEPTİ VE YASAKLI KELİMELER:
+   - TÜRK/ANADOLU JARGONU KESİNLİKLE YASAKTIR. (lan, valla, inşallah, abi, kanka vb.).
+   - Bunun yerine Amerikan dublaj jargonu kullan: "Dostum, adamım, evlat, lanet olsun."
+
+5. SATIR LİMİTİ VE UZUNLUK (DİKKAT!):
+   - Kullanıcı bu işlem için toplam ${imageCount} adet görsel yükledi. 
+   - Her görsel için en fazla 10 satır kuralına göre, üreteceğin toplam metin KESİNLİKLE ${maxLineCount} SATIRI GEÇMEMELİDİR!
+   - Gerekli mikro rolleri yap ancak ${maxLineCount} satır sınırını aşmamak için olayları gereksiz yere uzatma, kısa ve öz tut.
+
+KULLANILACAK KARAKTERLER: ${validChars.join(", ")}
+İŞLENECEK SENARYO: ${aiPrompt.value}
+
+Şimdi, yukarıdaki kurallara kusursuz bir şekilde uyarak chatlog'u yazmaya başla:`;
 
             try {
                 const response = await axios.post('api.php', {
-                    token: API_SECRET_TOKEN, // GÜVENLİK: İstekte token gönderiliyor
+                    token: API_SECRET_TOKEN,
                     action: 'generateChatlog',
                     prompt: prompt,
                     images: aiBase64Images.value,
@@ -175,7 +209,7 @@ const app = createApp({
                     isAiMenuOpen.value = false;
                     generateBtnText.value = "✨ Üretim Başarılı!";
                 } else {
-                    console.error("API Error: ", response.data.message || response.data.httpCode);
+                    console.error("API Error Code: " + response.data.httpCode);
                     generateBtnText.value = "⚠️ Hata Oluştu!";
                     keyIndex.value++;
                     localStorage.setItem('rp_last_key_index', keyIndex.value.toString());
@@ -250,7 +284,10 @@ const app = createApp({
 
             setTimeout(() => {
                 const container = document.getElementById('merged-scenes-container');
-                if (container) window.scrollTo({ top: container.offsetTop - 100, behavior: 'smooth' });
+                if (container) {
+                    // Sayfa yapısı değiştiği için .spa-content içindeki scroll'u ayarlıyoruz
+                    document.querySelector('.view-container').scrollTo({ top: container.offsetTop - 50, behavior: 'smooth' });
+                }
             }, 100);
         };
 
@@ -390,7 +427,7 @@ const app = createApp({
                     const base64Data = canvas.toDataURL("image/png").split(',')[1];
                     
                     const response = await axios.post('api.php', {
-                        token: API_SECRET_TOKEN, // GÜVENLİK: İstekte token gönderiliyor
+                        token: API_SECRET_TOKEN,
                         action: 'uploadImgur',
                         image: base64Data
                     });
@@ -418,6 +455,7 @@ const app = createApp({
         };
 
         return {
+            currentPage, // PORTAL - ARAÇ Geçiş Kontrolü
             aiBase64Images,
             isAiMenuOpen,
             characters,
@@ -435,8 +473,8 @@ const app = createApp({
             copyBtnText,
             lightboxVisible,
             lightboxImage,
-            textOnlyPreviewRef, // VUE REFS return edildi
-            workspaceRef,       // VUE REFS return edildi
+            textOnlyPreviewRef,
+            workspaceRef,
             openLightbox,
             closeLightbox,
             handleFileUpload,

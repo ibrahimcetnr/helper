@@ -1,4 +1,3 @@
-    </div> <!-- #app div sonu -->
-    <script src="script.js"></script>
+</div> <script src="script.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>
